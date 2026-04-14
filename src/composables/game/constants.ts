@@ -30,3 +30,12 @@ export const POWER_UP_DURATION = 8000  // ms effect duration
 export const BASE_SHOOT_COOLDOWN = 400
 export const RAPID_SHOOT_COOLDOWN = 150
 export const PLAYER_HIT_DURATION = 2000
+export const BOSS_W = 72
+export const BOSS_H = 40
+export const BOSS_HP = 10
+export const BOSS_SPEED_X = 2
+export const BOSS_SPEED_Y = 1.5
+export const BOSS_FIRE_INTERVAL = 800
+export const BOSS_HIT_FLASH = 300
+export const BOSS_SCORE = 500
+export const BOSS_LOWER_BOUND = 0.6  // Boss 下邊界 = H * BOSS_LOWER_BOUND

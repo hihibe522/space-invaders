@@ -1,6 +1,6 @@
 import { ref, readonly, onUnmounted, watchEffect } from 'vue'
 import type { Ref } from 'vue'
-import type { Rect, Bullet, Alien, Shield, UFO, PowerUp, Explosion } from './game/types'
+import type { Rect, Bullet, Alien, Shield, UFO, PowerUp, Explosion, Boss } from './game/types'
 import {
   W, H,
   PLAYER_W, PLAYER_H, PLAYER_SPEED,
@@ -11,8 +11,9 @@ import {
   POWER_UP_SPEED, POWER_UP_DROP_CHANCE, POWER_UP_SIZE, POWER_UP_DURATION,
   BASE_SHOOT_COOLDOWN, RAPID_SHOOT_COOLDOWN,
   PLAYER_HIT_DURATION,
+  BOSS_FIRE_INTERVAL, BOSS_HIT_FLASH, BOSS_SCORE, BOSS_LOWER_BOUND, BOSS_W,
 } from './game/constants'
-import { collide, makeAliens, makeShields, stepAliens, speedUpAliens, fireAlien } from './game/entities'
+import { collide, makeAliens, makeShields, stepAliens, speedUpAliens, fireAlien, spawnBoss, fireBoss } from './game/entities'
 import { useAudio } from './game/useAudio'
 import { draw as renderFrame } from './game/renderer'
 
@@ -43,6 +44,7 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
   let ufo: UFO = { x: -UFO_W, y: 30, w: UFO_W, h: UFO_H, active: false, dx: UFO_SPEED }
   let powerUps: PowerUp[] = []
   let explosions: Explosion[] = []
+  let boss: Boss | null = null
 
   // Key tracking
   const keys: Record<string, boolean> = {}
@@ -54,6 +56,7 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
   let ufoTimer = 0
   let alienDir = 1
   let currentStepInterval = ALIEN_STEP_INTERVAL
+  let bossFireTimer = 0
   let rafId = 0
 
   // Player state
@@ -67,6 +70,10 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
   let doubleShot = false
 
   // ── Wave helpers ───────────────────────────────────────────────────────────
+
+  function isBossWave(): boolean {
+    return wave.value % 5 === 0
+  }
 
   function waveRows(): number {
     return Math.min(8, ALIEN_ROWS + Math.floor(wave.value / 3))
@@ -83,6 +90,7 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
     playerBullets = []
     alienBullets = []
     aliens = makeAliens(ALIEN_ROWS)
+    boss = null
     shields = makeShields()
     ufo = { x: -UFO_W, y: 30, w: UFO_W, h: UFO_H, active: false, dx: UFO_SPEED }
     powerUps = []
@@ -91,6 +99,7 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
     currentStepInterval = ALIEN_STEP_INTERVAL
     alienStepTimer = 0
     alienFireTimer = 0
+    bossFireTimer = 0
     ufoTimer = 0
     playerHitTimer = 0
     rapidTimer = 0
@@ -107,7 +116,13 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
     player = { x: W / 2 - PLAYER_W / 2, y: H - 60, w: PLAYER_W, h: PLAYER_H }
     playerBullets = []
     alienBullets = []
-    aliens = makeAliens(waveRows())
+    if (isBossWave()) {
+      aliens = []
+      boss = spawnBoss()
+    } else {
+      aliens = makeAliens(waveRows())
+      boss = null
+    }
     shields = makeShields()
     ufo = { x: -UFO_W, y: 30, w: UFO_W, h: UFO_H, active: false, dx: UFO_SPEED }
     powerUps = []
@@ -116,6 +131,7 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
     currentStepInterval = waveStepInterval()
     alienStepTimer = 0
     alienFireTimer = 0
+    bossFireTimer = 0
     ufoTimer = 0
     playerHitTimer = 0
     audio.stopUFOHum()
@@ -266,11 +282,49 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
       if (a.alive) a.animFrame = alienStepTimer < currentStepInterval / 2 ? 0 : 1
     }
 
+    // Boss movement & firing
+    if (boss) {
+      boss.x += boss.dx
+      boss.y += boss.dy
+
+      if (boss.x <= 0) { boss.x = 0; boss.dx = Math.abs(boss.dx) }
+      if (boss.x + boss.w >= W) { boss.x = W - boss.w; boss.dx = -Math.abs(boss.dx) }
+      if (boss.y <= 40) { boss.y = 40; boss.dy = Math.abs(boss.dy) }
+      if (boss.y + boss.h >= H * BOSS_LOWER_BOUND) { boss.y = H * BOSS_LOWER_BOUND - boss.h; boss.dy = -Math.abs(boss.dy) }
+
+      boss.hitFlashTimer = Math.max(0, boss.hitFlashTimer - dt)
+
+      bossFireTimer += dt
+      if (bossFireTimer >= BOSS_FIRE_INTERVAL) {
+        bossFireTimer = 0
+        alienBullets.push(fireBoss(boss))
+      }
+    }
+
     // Explosions
     explosions = explosions.filter(e => e.t > 0)
     for (const e of explosions) e.t -= dt
 
     // ── Collisions ──────────────────────────────────────────────────────────
+
+    // Player bullets vs Boss
+    if (boss) {
+      for (let bi = playerBullets.length - 1; bi >= 0; bi--) {
+        const b = playerBullets[bi]!
+        if (collide(b, boss)) {
+          boss.hp--
+          boss.hitFlashTimer = BOSS_HIT_FLASH
+          playerBullets.splice(bi, 1)
+          audio.playExplosion()
+          if (boss.hp <= 0) {
+            explosions.push({ x: boss.x + BOSS_W / 2, y: boss.y + boss.h / 2, t: 600 })
+            score.value += BOSS_SCORE
+            boss = null
+          }
+          break
+        }
+      }
+    }
 
     // Player bullets vs aliens & UFO & shields
     for (let bi = playerBullets.length - 1; bi >= 0; bi--) {
@@ -351,7 +405,7 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
     }
 
     // Wave clear
-    if (aliens.every(a => !a.alive)) {
+    if (isBossWave() ? boss === null : aliens.every(a => !a.alive)) {
       nextWave()
     }
   }
@@ -381,7 +435,7 @@ export function useSpaceInvaders(canvasRef: Ref<HTMLCanvasElement | null>) {
     lastTime = time
     update(dt)
     renderFrame(ctx, {
-      player, playerBullets, alienBullets, aliens, shields, ufo, powerUps, explosions,
+      player, playerBullets, alienBullets, aliens, shields, ufo, powerUps, explosions, boss,
     }, {
       gameState: gameState.value,
       score: score.value,

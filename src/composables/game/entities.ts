@@ -1,10 +1,11 @@
-import type { Rect, Alien, Shield, Bullet } from './types'
+import type { Rect, Alien, Shield, Bullet, Boss } from './types'
 import {
   W, H,
   ALIEN_COLS, ALIEN_W, ALIEN_H, ALIEN_PAD_X, ALIEN_PAD_Y,
   ALIEN_STEP, ALIEN_DROP,
   SHIELD_COUNT,
   BULLET_W, BULLET_H, ALIEN_BULLET_SPEED,
+  BOSS_W, BOSS_H, BOSS_HP, BOSS_SPEED_X, BOSS_SPEED_Y,
 } from './constants'
 
 export function collide(a: Rect, b: Rect): boolean {
@@ -83,6 +84,29 @@ export function speedUpAliens(aliens: Alien[], baseInterval: number): number {
   const remaining = aliens.filter(a => a.alive).length
   const ratio = remaining / aliens.length
   return Math.max(100, baseInterval * ratio)
+}
+
+export function spawnBoss(): Boss {
+  return {
+    x: W / 2 - BOSS_W / 2,
+    y: 50,
+    w: BOSS_W,
+    h: BOSS_H,
+    dx: BOSS_SPEED_X,
+    dy: BOSS_SPEED_Y,
+    hp: BOSS_HP,
+    hitFlashTimer: 0,
+  }
+}
+
+export function fireBoss(boss: Boss): Bullet {
+  return {
+    x: boss.x + boss.w / 2 - BULLET_W / 2,
+    y: boss.y + boss.h,
+    w: BULLET_W,
+    h: BULLET_H,
+    dy: ALIEN_BULLET_SPEED,
+  }
 }
 
 /**

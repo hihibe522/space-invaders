@@ -31,6 +31,13 @@ export interface PowerUp extends Rect {
   dy: number
 }
 
+export interface Boss extends Rect {
+  dx: number
+  dy: number
+  hp: number
+  hitFlashTimer: number
+}
+
 export interface Explosion {
   x: number
   y: number

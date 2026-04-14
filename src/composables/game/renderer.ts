@@ -1,9 +1,10 @@
-import type { GameState, Alien, Shield, UFO, Bullet, PowerUp, Explosion, Rect } from './types'
+import type { GameState, Alien, Shield, UFO, Bullet, PowerUp, Explosion, Rect, Boss } from './types'
 import {
   W, H,
   PLAYER_W, PLAYER_H,
   ALIEN_W, ALIEN_H,
   UFO_W, UFO_H,
+  BOSS_HP,
 } from './constants'
 
 export interface GameObjects {
@@ -15,6 +16,7 @@ export interface GameObjects {
   ufo: UFO
   powerUps: PowerUp[]
   explosions: Explosion[]
+  boss: Boss | null
 }
 
 export interface GameUIState {
@@ -46,7 +48,7 @@ export function draw(
   objects: GameObjects,
   ui: GameUIState,
 ): void {
-  const { player, playerBullets, alienBullets, aliens, shields, ufo, powerUps, explosions } = objects
+  const { player, playerBullets, alienBullets, aliens, shields, ufo, powerUps, explosions, boss } = objects
   const { gameState, playerHitTimer, rapidTimer, doubleTimer } = ui
 
   // Background
@@ -82,6 +84,9 @@ export function draw(
 
   // UFO
   if (ufo.active) drawUFO(ctx, ufo)
+
+  // Boss
+  if (boss) drawBoss(ctx, boss)
 
   // Aliens
   for (const a of aliens) {
@@ -271,6 +276,53 @@ function drawAlien(ctx: CanvasRenderingContext2D, a: Alien) {
   ctx.fillStyle = ALIEN_COLORS[type]
   ctx.fillRect(x, y + 8, ALIEN_W, 2)
   ctx.shadowBlur = 0
+}
+
+function drawBoss(ctx: CanvasRenderingContext2D, boss: Boss) {
+  const { x, y, w, h, hp, hitFlashTimer } = boss
+  const isFlashing = hitFlashTimer > 0
+
+  const bodyColor = isFlashing ? '#ffffff' : '#cc0000'
+  const glowColor = isFlashing ? '#ffffff' : '#ff2222'
+
+  ctx.shadowColor = glowColor
+  ctx.shadowBlur = 16
+
+  // Main body
+  ctx.fillStyle = bodyColor
+  ctx.fillRect(x + 8, y, w - 16, h)
+
+  // Side wings
+  ctx.fillRect(x, y + 10, 12, h - 16)
+  ctx.fillRect(x + w - 12, y + 10, 12, h - 16)
+
+  // Top cannon
+  ctx.fillRect(x + w / 2 - 4, y - 6, 8, 10)
+
+  // Eye sockets
+  ctx.shadowBlur = 0
+  ctx.fillStyle = isFlashing ? '#cc0000' : '#0a0a1a'
+  ctx.fillRect(x + 14, y + 10, 8, 8)
+  ctx.fillRect(x + w - 22, y + 10, 8, 8)
+
+  ctx.shadowBlur = 0
+
+  // HP bar (above boss)
+  const barW = w
+  const barH = 6
+  const barX = x
+  const barY = y - 14
+  const hpRatio = hp / BOSS_HP
+
+  ctx.fillStyle = '#440000'
+  ctx.fillRect(barX, barY, barW, barH)
+
+  ctx.fillStyle = '#ff2222'
+  ctx.fillRect(barX, barY, barW * hpRatio, barH)
+
+  ctx.strokeStyle = '#ff6666'
+  ctx.lineWidth = 1
+  ctx.strokeRect(barX, barY, barW, barH)
 }
 
 function drawUFO(ctx: CanvasRenderingContext2D, ufo: UFO) {
